@@ -1,0 +1,48 @@
+<html>
+
+<head></head>
+
+<body>
+    <form onSubmit="handleSubmit(event)">
+        <label>
+            URL: <input type="text" name="url"
+                value="https://www.tradingview.com/chart/EURJPY/2mipoaBZ-Head-And-Shoulders-And-123-pattern/" />
+        </label>
+        <br /><br />
+        <label>
+            From: <input type="datetime-local" name="from" />
+        </label>
+        <br /><br />
+        <label>
+            To: <input type="datetime-local" name="to" />
+        </label>
+        <br /><br />
+        <button type="submit">Submit</button>
+    </form>
+
+    <script>
+        function handleSubmit(event) {
+            event.preventDefault();
+
+            const data = {
+                url: document.querySelector('[name=url]').value,
+                from: new Date(document.querySelector('[name=from]').value),
+                to: new Date(document.querySelector('[name=to]').value),
+                clientTzOffset: Number(new Date().toLocaleString('en-US', { timeZoneName: 'short' }).slice(-2)),
+            }
+
+            console.log(data)
+
+            fetch("http://localhost:43691/scrap", {
+                method: "POST",
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+        }
+    </script>
+</body>
+
+</html>
