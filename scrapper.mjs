@@ -23,19 +23,31 @@ app.post("/scrap", (req, res) => {
 		.then(browser => browser.newPage())
 		.then(page => page.goto(req.body.url).then(() => page.content()))
 		.then(html => {
+			const getData = content => {
+				const { panes } =  content.layout === "s" ? content.charts[0] : content
+				
+				for (let pane in panes) {
+					for (let source in panes[pane].sources) {
+						if (panes[pane].sources[source].type === "MainSeries") return panes[pane].sources[source].bars.data;
+					}
+				}
+			}
+
 			const $ = cheerio.load(html);
 			const options = $('.tv-chart-view').data('options');
 			const content = JSON.parse(options.content)
+			
+			fs.writeFile(`raw-scrappings/${options.id}.json`, JSON.stringify(options, null, 2), err => { if (err) throw err });
+			
 			const timezone = content.layout === "s" ? content.charts[0].timezone : content.timezone;
-			const data = (content.layout === "s" ? content.charts[0].panes : content.panes)[0].sources[0].bars.data;
-
+			const data = getData(content);
+			
 			const selectKlinesFrom = moment.tz(req.body.from, timezone).valueOf() / 1000;
 			const selectKlinesTo = moment.tz(req.body.to, timezone).valueOf() / 1000;
-
+			
+			console.log("IDEA ID:", options.id);
 			console.log("IDEA TIMEZONE:", timezone);
-
-			fs.writeFile(`raw-scrappings/${options.id}.json`, JSON.stringify(options, null, 2), err => { if (err) throw err });
-
+			
 			const klines = data.reduce((acc, { value }) => {
 				if (value[0] >= selectKlinesFrom && value[0] <= selectKlinesTo) {
 					return [...acc, {
