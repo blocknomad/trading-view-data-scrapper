@@ -2,6 +2,7 @@ import express from "express";
 import puppeteer from "puppeteer";
 import cheerio from "cheerio";
 import cors from "cors";
+import moment from "moment-timezone";
 import fs from "fs";
 
 const app = express();
@@ -11,8 +12,7 @@ app.use(express.json());
 app.use(cors({ origin: "*" }));
 
 app.post("/scrap", (req, res) => {
-	console.log();
-	console.log("STARTING NEW DATA SCRAP");
+	console.log("\nSTARTING NEW DATA SCRAP");
 	console.log(req.body)
 
 	puppeteer
@@ -26,20 +26,21 @@ app.post("/scrap", (req, res) => {
 			const $ = cheerio.load(html);
 			const options = $('.tv-chart-view').data('options');
 			const content = JSON.parse(options.content)
+			const timezone = content.layout === "s" ? content.charts[0].timezone : content.timezone;
+			const data = (content.layout === "s" ? content.charts[0].panes : content.panes)[0].sources[0].bars.data;
 
-			const selectKlinesFrom = new Date(req.body.from);
-			const selectKlinesTo = new Date(req.body.to);
+			const selectKlinesFrom = moment.tz(req.body.from, timezone).valueOf() / 1000;
+			const selectKlinesTo = moment.tz(req.body.to, timezone).valueOf() / 1000;
 
-			const ideaTzOffset = new Date().toLocaleString('en-US', { timeZone: content.timezone, timeZoneName: 'short' }).slice(-2);
-			const tzOffset = req.body.clientTzOffset - Number(ideaTzOffset);
+			console.log("IDEA TIMEZONE:", timezone);
 
-			const selectKlinesFromUTCMs = selectKlinesFrom.getTime() / 1000 + tzOffset * 60 * 60;
-			const selectKlinesToUTCMs = selectKlinesTo.getTime() / 1000 + tzOffset * 60 * 60;
+			fs.writeFile(`raw-scrappings/${options.id}.json`, JSON.stringify(options, null, 2), err => { if (err) throw err });
 
-			const klines = content.panes[0].sources[0].bars.data.reduce((acc, { value }) => {
-				if (value[0] >= selectKlinesFromUTCMs && value[0] <= selectKlinesToUTCMs) {
+			const klines = data.reduce((acc, { value }) => {
+				if (value[0] >= selectKlinesFrom && value[0] <= selectKlinesTo) {
 					return [...acc, {
 						t: value[0],
+						tf: moment.tz(value[0] * 1000, timezone).format("D MMM YYYY LTS"),
 						o: value[1],
 						h: value[2],
 						l: value[3],
@@ -50,7 +51,6 @@ app.post("/scrap", (req, res) => {
 				}
 			}, [])
 
-
 			fs.writeFile(`scrappings/${options.id}.json`, JSON.stringify({
 				id: options.id,
 				name: options.name,
@@ -59,12 +59,11 @@ app.post("/scrap", (req, res) => {
 			}, null, 2), (err) => {
 				if (err) throw err;
 
-				console.log()
-				console.log(`COMPLETED SAVING ${options.id}.json`);
-				console.log()
+				console.log(`COMPLETED SCRAPPING AND SAVING ${options.id}.json \n\n`);
 			})
 		})
-		.catch(console.error);
+		.catch(console.error)
+		.finally(() => res.send());
 });
 
 app.listen(port, '0.0.0.0', () => {
